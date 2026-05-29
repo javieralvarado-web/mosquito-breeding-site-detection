@@ -1,222 +1,268 @@
 # Detección de Criaderos de Mosquitos con YOLO y Data Augmentation
 
-Este proyecto busca detectar potenciales criaderos de mosquitos en imágenes aéreas capturadas con drones, utilizando modelos de detección de objetos basados en **YOLO**.  
-Inicialmente se propuso entrenar una **red GAN** para generar imágenes sintéticas de la clase minoritaria; sin embargo, debido a problemas de convergencia, falta de datos y baja calidad en las imágenes generadas, el enfoque fue reemplazado por un esquema robusto de **data augmentation tradicional**, logrando mejorar el balance entre clases y evaluar su impacto en el rendimiento del modelo.
+## Descripción
 
-Este repositorio contiene el pipeline completo para procesar los datos, aplicar aumentación, entrenar los modelos YOLO y comparar los resultados.
+Este proyecto propone un sistema de detección automática de potenciales criaderos de mosquitos en imágenes aéreas capturadas mediante drones, utilizando modelos de detección de objetos basados en YOLO.
+
+El objetivo principal es evaluar el impacto de estrategias de aumentación de datos orientadas a clases minoritarias sobre el desempeño de modelos de detección, comparando un modelo base entrenado con imágenes originales contra un modelo optimizado utilizando técnicas de Data Augmentation.
+
+El proyecto fue desarrollado como parte de la Maestría en Cómputo Estadístico y constituye una etapa inicial dentro de una investigación orientada al monitoreo automatizado de criaderos mediante visión por computadora.
+
+---
 
 # Objetivo del Proyecto
 
-Evaluar el impacto de la **aumentación de datos** en el rendimiento de modelos YOLO para la detección de potenciales criaderos de mosquitos en imágenes aéreas.
+Evaluar el impacto de técnicas de aumentación de datos en la detección de potenciales criaderos de mosquitos presentes en imágenes aéreas.
 
-Para ello, se entrenaron dos modelos:
+Para ello se entrenaron dos modelos:
 
-1. **Modelo base (sin augmentación):**  
-   Entrenado únicamente con las imágenes originales.
+1. **Modelo base (sin augmentación)**.
+2. **Modelo optimizado utilizando estrategias de Data Augmentation orientadas a clases minoritarias**.
 
-2. **Modelo con augmentación:**  
-   Entrenado con un dataset aumentado mediante transformaciones tradicionales
-   (rotaciones, flips, escalado, jittering, etc.) que incrementan la variabilidad
-   visual y ayudan a balancear clases minoritarias.
+La comparación se realizó utilizando métricas estándar de detección de objetos:
 
-El objetivo principal es **comparar el desempeño entre ambos modelos**, evaluando mejoras en:
-
-- Precisión (Precision)  
-- Recall  
-- mAP50  
-- mAP50–95  
-- Desempeño en clases minoritarias  
-
-y demostrar cómo un esquema de augmentación bien diseñado puede mejorar la capacidad del modelo para detectar objetos relevantes en escenarios reales.
+* Precision
+* Recall
+* mAP@50
+* mAP@50-95
 
 ---
 
-#  Estructura del Repositorio
-```bash
-Proyecto-Vision-Computacional/
+# Tecnologías Utilizadas
+
+* Python
+* Ultralytics YOLO
+* OpenCV
+* NumPy
+* Albumentations
+* Deep Learning
+* Computer Vision
+* Object Detection
+
+---
+
+# Estructura del Repositorio
+
+```text
+mosquito-breeding-site-detection/
 │
-├── Yolo12-Small/ # Pipeline principal del modelo YOLOv12-Small
-│ ├── data.yaml # Configuración del dataset YOLO
-│ ├── yolo12s.pt # Pesos finales del modelo entrenado
-│ ├── extract_objects.py # Extracción de objetos recortados
-│ ├── extract_patches_for_gan.py # Preparación de parches para GAN
-│ ├── split_yolo_dataset.py # División de imágenes en train/val
-│ ├── train_dcgan_cubeta.py # GAN experimental (descartada)
-│ ├── train_dcgan_maceta.py # GAN experimental (descartada)
-│ ├── train_yolo12s.py # Modelo base de YOLO
-│ ├── copy_paste.py # Copy-Paste Augmentación
-| └── train_yolo12_optimized.py # Modeo YOLO con augmentacion de clases minoritarias
-└── README.md
+├── README.md
+├── requirements.txt
+│
+├── src/
+│   ├── split_yolo_dataset.py
+│   ├── train_yolo12s.py
+│   ├── train_yolo12_optimized.py
+│   ├── copy_paste.py
+│   └── predict_examples.py
+│
+├── weights/
+│   ├── best.pt
+│   └── last.pt
+│
+├── README_assets/
+│   └── imágenes utilizadas en la documentación
+│
+└── configs/
+    └── data.yaml
 ```
-#  Pipeline Completo del Proyecto
-
-El flujo de trabajo del proyecto se diseñó para comparar dos enfoques de entrenamiento:
-
-1. **Modelo base YOLOv12-Small** (sin augmentación)  
-2. **Modelo YOLOv12-Small optimizado** (con augmentación orientada a clases minoritarias)
-
-A continuación se describe el pipeline completo, organizado según los scripts dentro del repositorio.
 
 ---
 
-## 1. Organización y División del Dataset  
+# Pipeline del Proyecto
+
+## 1. División del Dataset
+
 **Script:** `split_yolo_dataset.py`
 
-- Toma las imágenes y etiquetas originales.  
-- Genera las carpetas requeridas por YOLO:  
-  - `images/train`, `images/val`  
-  - `labels/train`, `labels/val`  
-- Realiza una división **80% entrenamiento / 20% validación**.  
-- Verifica que cada imagen tenga su archivo `.txt` correspondiente.
+Este script organiza el dataset en el formato requerido por YOLO:
 
-Este paso prepara el dataset base para ambos modelos (con y sin augmentación).
+* División entrenamiento / validación.
+* Organización de imágenes y etiquetas.
+* Verificación de consistencia entre imágenes y anotaciones.
 
 ---
 
-## 2. Extracción de Objetos para Análisis y Pruebas  
-**Scripts:**  
-- `extract_objects.py`  
-- `extract_patches_for_gan.py`
+## 2. Entrenamiento del Modelo Base
 
-Propósitos:
-
-- Extraer recortes de objetos, especialmente **clases minoritarias** (cubeta, maceta).  
-- Generar parches para analizar la distribución visual de las clases.  
-- Crear datasets auxiliares para experimentos con GAN (posteriormente descartados).
-
-Este paso **no afecta directamente al entrenamiento**, pero permitió estudiar el desbalance de clases.
-
----
-
-## 3. Intento de Generación Sintética con GAN (Descartado)  
-**Scripts:**  
-- `train_dcgan_cubeta.py`  
-- `train_dcgan_maceta.py`
-
-Se entrenaron dos DCGAN independientes para generar imágenes sintéticas de:
-
-- **cubeta**  
-- **maceta**
-
-Motivación: aumentar clases minoritarias.
-
-Problemas encontrados:
-
-- Convergencia inestable  
-- Artefactos y falta de realismo  
-- Dataset pequeño → GAN poco robusto  
-
-Por ello, este enfoque fue **descartado**, manteniendo los scripts como evidencia experimental.
-
----
-
-## 4. Entrenamiento del Modelo Base YOLOv12-Small  
 **Script:** `train_yolo12s.py`
 
-Este modelo se entrena **únicamente con el dataset original**, sin aumentación adicional.  
-Sirve como punto de comparación para medir la mejora del modelo optimizado.
+Entrenamiento del modelo base utilizando únicamente las imágenes originales del dataset.
 
-Configuración:
-
-- Arquitectura: YOLOv12-Small  
-- Dataset definido en `data.yaml`  
-- Hiperparámetros estándar  
-- Entrenamiento desde cero o desde pesos base
-
-Salida principal:
-
-- `yolo12s.pt` → pesos del modelo base
+Este modelo sirve como referencia para evaluar el impacto de las estrategias de aumentación de datos.
 
 ---
 
-## 5. Estrategias de Aumentación para Corregir el Desbalance
-Se incluye una estrategia de augmentación específica para incrementar la representatividad de:
+## 3. Aumentación de Datos
 
-- **cubeta**  
-- **maceta**
-
-### 5.1 Copy-Paste Augmentation  
 **Script:** `copy_paste.py`
 
-- Toma recortes de objetos minoritarios.  
-- Los inserta estratégicamente en nuevas imágenes.  
-- Genera nuevos ejemplos realistas sin afectar la distribución de fondo.
+Implementación de una estrategia Copy-Paste Augmentation para incrementar la presencia de clases minoritarias.
 
-### 5.2 Aumentación Combinada y Entrenamiento Optimizado  
+Las nuevas muestras generadas buscan mejorar la capacidad del modelo para detectar objetos poco representados dentro del conjunto de entrenamiento.
+
+---
+
+## 4. Entrenamiento del Modelo Optimizado
+
 **Script:** `train_yolo12_optimized.py`
 
-Este es el **pipeline final de entrenamiento**, que incorpora:
+Entrenamiento de un segundo modelo utilizando el conjunto de datos aumentado.
 
-- Copy-Paste  
-- Transformaciones geométricas  
-- Jitter de color  
-- Variaciones aleatorias en escala, posición y orientación  
-- Mezcla con imágenes originales
-
-Este modelo es evaluado contra el modelo base para medir la mejora en:
-
-- precisión  
-- recall  
-- mAP50  
-- mAP50–95  
-- detección de clases minoritarias
+Este modelo incorpora ejemplos adicionales generados mediante augmentación para mejorar el desempeño en clases minoritarias.
 
 ---
 
-## 6. Evaluación Final de Modelos  
-Ambos modelos (base y optimizado) se evalúan con el mismo conjunto de validación.
+## 5. Inferencia sobre Nuevos Vuelos
 
-Métricas principales:
+**Script:** `predict_examples.py`
 
-- Precision  
-- Recall  
-- mAP@50  
-- mAP@50–95  
-- Análisis específico por clase  
+Permite cargar el modelo entrenado y realizar inferencia sobre imágenes provenientes de vuelos distintos a los utilizados durante el entrenamiento.
 
-Este paso permite cuantificar el impacto de la aumentación en clases minoritarias.
+Las detecciones generadas son utilizadas para evaluar cualitativamente la capacidad de generalización del modelo.
 
 ---
 
-# 🧠 Resumen del Pipeline
+# Resultados de Inferencia
 
-1. **División del dataset** → `split_yolo_dataset.py`  
-2. **Análisis de clases minoritarias** → `extract_objects.py`, `extract_patches_for_gan.py`  
-3. **Intento de GAN (documentado, pero descartado)** → `train_dcgan_*`  
-4. **Entrenamiento del modelo base** → `train_yolo12s.py`  
-5. **Aumentación de datos** → `copy_paste.py`  
-6. **Modelo YOLO optimizado con augmentación** → `train_yolo12_optimized.py`  
-7. **Evaluación comparativa** → métricas de validación YOLO  
+A continuación se muestran ejemplos de detecciones realizadas sobre imágenes provenientes de vuelos distintos a los utilizados durante el entrenamiento.
+
+## Ejemplo 1
+
+<table>
+<tr>
+<td align="center">
+<b>Imagen Original</b><br>
+<img src="README_assets/frame_00000.png" width="450">
+</td>
+
+<td align="center">
+<b>Detecciones del Modelo</b><br>
+<img src="README_assets/frame_00000_pred.jpg" width="450">
+</td>
+</tr>
+</table>
+
+## Ejemplo 2
+
+<table>
+<tr>
+<td align="center">
+<b>Imagen Original</b><br>
+<img src="README_assets/frame_00990.png" width="450">
+</td>
+
+<td align="center">
+<b>Detecciones del Modelo</b><br>
+<img src="README_assets/frame_00990_pred.jpg" width="450">
+</td>
+</tr>
+</table>
+
+## Ejemplo 3
+
+<table>
+<tr>
+<td align="center">
+<b>Imagen Original</b><br>
+<img src="README_assets/frame_02250.png" width="450">
+</td>
+
+<td align="center">
+<b>Detecciones del Modelo</b><br>
+<img src="README_assets/frame_02250_pred.jpg" width="450">
+</td>
+</tr>
+</table>
+
+## Ejemplo 4
+
+<table>
+<tr>
+<td align="center">
+<b>Imagen Original</b><br>
+<img src="README_assets/frame_03270.png" width="450">
+</td>
+
+<td align="center">
+<b>Detecciones del Modelo</b><br>
+<img src="README_assets/frame_03270_pred.jpg" width="450">
+</td>
+</tr>
+</table>
 
 ---
 
-Este pipeline refleja fielmente la estructura y metodología del proyecto, destacando la comparación entre modelos con y sin aumentación.
+# Modelos Entrenados
 
-# Requerimientos e Instalación
+El repositorio incluye los pesos finales obtenidos durante el entrenamiento:
 
-Este proyecto utiliza Python y librerías especializadas en visión computacional y deep learning.
-Para instalar las dependencias principales, utilice el archivo requirements.txt:
+* `weights/best.pt`
+* `weights/last.pt`
 
+Estos modelos pueden utilizarse directamente para realizar inferencia sobre nuevas imágenes.
+
+---
+
+# Instalación
+
+Clonar el repositorio:
+
+```bash
+git clone https://github.com/javieralvarado-web/mosquito-breeding-site-detection.git
+cd mosquito-breeding-site-detection
+```
+
+Instalar dependencias:
+
+```bash
 pip install -r requirements.txt
+```
 
+---
 
-Nota: El archivo requirements.txt no incluye PyTorch, ya que la versión adecuada depende de si se utilizará GPU y de la versión de CUDA instalada.
-Esto es una práctica estándar en proyectos profesionales.
+# Instalación de PyTorch
 
-## Instalación de PyTorch con GPU (CUDA)
+El archivo `requirements.txt` no incluye PyTorch debido a que la instalación depende del hardware disponible y de la versión de CUDA utilizada.
 
-Para entrenar YOLO con aceleración por GPU, instale la versión adecuada de PyTorch según su sistema.
+### CUDA 12.1
 
-## Instalación recomendada (CUDA 12.1)
-
-Si su GPU NVIDIA soporta CUDA moderno:
-
+```bash
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+```
 
-## Alternativa (CUDA 11.8)
+### CUDA 11.8
 
-Si su entorno utiliza drivers más antiguos:
-
+```bash
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+```
 
+---
 
+# Ejemplo de Inferencia
+
+```bash
+python src/predict_examples.py
+```
+
+El script cargará el modelo entrenado y generará las detecciones correspondientes sobre las imágenes especificadas.
+
+---
+
+# Trabajo Futuro
+
+* Integración con sistemas de georreferenciación.
+* Seguimiento temporal de objetos mediante tracking.
+* Estimación automática de coordenadas GPS de criaderos detectados.
+* Evaluación sobre conjuntos de prueba independientes.
+* Integración dentro de un pipeline completo de monitoreo mediante drones.
+
+---
+
+# Autor
+
+**Javier Alvarado**
+
+Maestría en Cómputo Estadístico
+
+Centro de Investigación en Matemáticas (CIMAT)
